@@ -1,7 +1,7 @@
 from abstract_graph_reader import AbstractGraphReader
 from csv_processor import CSVProcessor
 from dot_reader.dot_reader import DotReader
-from graph_classifier import GraphClassifier, GraphType
+from graph_classifier.graph_classifier import GraphClassifier, GraphType
 from graph_data_loader import GraphDataLoader
 from horizontal_bar_reader.horizontal_bar_reader import HorizontalBarReader
 from line_reader.line_reader import LineReader
