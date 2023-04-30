@@ -10,7 +10,7 @@ class ExampleReader(AbstractGraphReader):
     def get_read_result(self):
         return self.read_result
 
-    def read_picture(self, filepath):
+    def read_graph(self, filepath):
         with open(filepath, 'r') as file:
             # 处理文件后写入到read_result中即可。
             self.read_result.id = "example_id"
