@@ -3,7 +3,7 @@ import os
 import shutil
 
 
-def parse_json_file(file_path):
+def get_chart_type_from_json(file_path):
     """
     # 定义函数来解析json文件
     """
@@ -19,7 +19,7 @@ def traverse_directory(directory):
         for filename in filenames:
             if filename.endswith(".json"):
                 file_path = os.path.join(dirpath, filename)
-                chart_type = parse_json_file(file_path)
+                chart_type = get_chart_type_from_json(file_path)
                 yield filename, chart_type
 
 
