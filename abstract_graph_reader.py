@@ -1,13 +1,13 @@
 from abc import ABC, abstractmethod
 
+from read_result import ReadResult
 
-# 这是用@abstractmethod装饰器表示的一个接口，指定了需要实现的函数：read_picture。
-# 需要按接口定义来写实现类，具体的例子在example_reader中的example_reader.py可以看到如何实现这个接口。
+
 class AbstractGraphReader(ABC):
-    @abstractmethod
-    def read_picture(self, filepath):
-        pass
+    """这是用@abstractmethod装饰器表示的一个接口，指定了需要实现的函数：read_picture。
+    需要按接口定义来写实现类，具体的例子在example_reader中的example_reader.py可以看到如何实现这个接口。
+    """
 
     @abstractmethod
-    def get_read_result(self):
+    def read_graph(self, filepath) -> ReadResult:
         pass
