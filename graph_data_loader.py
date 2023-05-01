@@ -1,6 +1,6 @@
 import os
 
-from train_graph_classify import get_chart_type_from_json
+from graph_classifier.train_graph_classify import get_chart_type_from_json
 
 
 class GraphDataLoader:

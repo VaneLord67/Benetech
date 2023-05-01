@@ -18,12 +18,34 @@ class GraphType(Enum):
 
 class GraphClassifier:
     def __init__(self):
-        pass
+        self.model = LeNet()
+        self.model.load_state_dict(torch.load('graph_classifier/graph_classifier.pth'))
+        self.transform = transforms.Compose([
+                transforms.Resize((267, 466)),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+            ])
 
     def classify(self, graph_path: str) -> GraphType:
-        with open(graph_path, 'r') as file:
-            return GraphType.VERTICAL_BAR
-
+        # 加载要预测的图片并进行数据预处理
+        image = Image.open(graph_path)
+        image = self.transform(image)
+        # 对图片进行预测
+        with torch.no_grad():
+            output = self.model(image.unsqueeze(0))  # 加一维，batch size为1
+            _, predicted = torch.max(output.data, 1)
+            print(predicted.item())  # 输出预测的分类标签
+            item = predicted.item()
+            if item == 0:
+                return GraphType.DOT
+            elif item == 1:
+                return GraphType.HORIZONTAL_BAR
+            elif item == 2:
+                return GraphType.LINE
+            elif item == 3:
+                return GraphType.SCATTER
+            else:
+                return GraphType.VERTICAL_BAR
 
 # 定义LeNet网络
 class LeNet(nn.Module):
@@ -63,7 +85,6 @@ def train():
 
     # 加载数据集
     dataset = ImageFolder(root='dataset/train/classify', transform=transform)
-    print(dataset.class_to_idx)
     # dataset = Subset(dataset, range(100))
     train_size = int(0.8 * len(dataset))
     test_size = len(dataset) - train_size
@@ -78,10 +99,9 @@ def train():
     model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
-    num_epochs = 1
+    num_epochs = 5
     # 训练模型
     for epoch in range(num_epochs):
-        # print(f'epoch: {epoch}')
         model.train()
         progress_bar = tqdm(enumerate(train_loader), total=len(train_loader))
         for i, (data, label) in progress_bar:
@@ -110,7 +130,7 @@ def train():
                 correct += (predicted == label).sum().item()
             accuracy = 100 * correct / total
             print('\nEpoch: %d, Test Accuracy: %.2f%%' % (epoch + 1, accuracy))
-    torch.save(model.state_dict(), 'graph_classifier/graph_classifier.pth')
+            torch.save(model.state_dict(), f'graph_classifier/graph_classifier_epoch{epoch + 1}.pth')
 
 
 def predict():
@@ -138,4 +158,4 @@ def predict():
 
 if __name__ == '__main__':
     # predict()
-    train()
+    train() # Epoch: 5, Test Accuracy: 99.22%
