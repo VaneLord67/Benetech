@@ -14,3 +14,6 @@ class ReadResult:
         y_data_series = ";".join(self.y_series)
         return [f'{self.id}_x', x_data_series, self.chart_type], \
                [f'{self.id}_y', y_data_series, self.chart_type]
+
+    def __str__(self):
+        return str(self.toCSVResult())
