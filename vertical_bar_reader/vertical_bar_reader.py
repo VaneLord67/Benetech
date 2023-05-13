@@ -10,6 +10,231 @@ from abstract_graph_reader import AbstractGraphReader
 from graph_classifier.graph_classifier import GraphType
 from read_result import ReadResult
 
+DEBUG_MODE = True
+
+
+def is_horizontal_line(y1, y2):
+    if y1 == y2:
+        return True
+    return False
+
+
+def is_vertical_line(x1, x2):
+    if x1 == x2:
+        return True
+    return False
+
+
+def get_x_axis_img(img, intersection):
+    height, width, _ = img.shape
+    return img[intersection[1]:height, 0:width]
+
+
+def get_y_axis_img(img, intersection):
+    height, width, _ = img.shape
+    return img[0:height, 0:intersection[0]]
+
+
+def background_is_grey_or_black(img) -> bool:
+    gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    gray_mean = cv2.mean(gray_img)[0]
+    threshold = 150  # 阈值可以根据具体情况进行调整
+    if gray_mean < threshold:
+        if DEBUG_MODE:
+            print('Image background is dark or gray')
+        return True
+    else:
+        if DEBUG_MODE:
+            print('Image background is light or bright')
+        return False
+
+
+def invert_img(img):
+    gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    lut = np.zeros((256, 1), dtype=np.uint8)
+    for i in range(256):
+        lut[i][0] = 255 - i
+    inverted_img = cv2.LUT(gray_img, lut)
+    inverted_img = cv2.cvtColor(inverted_img, cv2.COLOR_GRAY2BGR)
+    cv2.imshow('invert_img', inverted_img)
+    return inverted_img
+
+
+def get_intersection(img):
+    intersection_img = np.copy(img)
+    intersection_img_height, intersection_img_width, _ = intersection_img.shape
+    # 转换为灰度图像
+    gray = cv2.cvtColor(intersection_img, cv2.COLOR_BGR2GRAY)
+    # 边缘检测
+    edges = cv2.Canny(gray, 50, 150, apertureSize=3)
+    # 直线检测
+    lines = cv2.HoughLinesP(edges, rho=1, theta=np.pi / 180, threshold=100, minLineLength=100, maxLineGap=3)
+
+    horizontal_lines = []
+    vertical_lines = []
+    # 在原始图像上绘制直线
+    for line in lines:
+        x1, y1, x2, y2 = line[0]
+        if is_horizontal_line(y1, y2) and abs(intersection_img_height - y1) > 5:
+            cv2.line(intersection_img, (x1, y1), (x2, y2), (0, 0, 255), 2)
+            horizontal_lines.append((x1, y1, x2, y2))
+        if is_vertical_line(x1, x2) and abs(intersection_img_width - x1) > 5:
+            cv2.line(intersection_img, (x1, y1), (x2, y2), (0, 0, 255), 2)
+            vertical_lines.append((x1, y1, x2, y2))
+    if DEBUG_MODE:
+        cv2.imshow('intersection_img', intersection_img)
+    if len(horizontal_lines) > 0:
+        horizontal_axis = max(horizontal_lines, key=lambda l: l[1])
+        intersection = (horizontal_axis[0], horizontal_axis[1])
+        return intersection
+    elif len(vertical_lines) > 0:
+        vertical_axis = max(vertical_lines, key=lambda l: l[0])
+        intersection = (vertical_axis[0], vertical_axis[1])
+        return intersection
+    raise LookupError("未定位到坐标轴原点")
+
+
+def rotate_x_axis_img(x_axis_img, angle):
+    rows, cols = x_axis_img.shape[:2]
+    # 计算旋转矩阵
+    M = cv2.getRotationMatrix2D((cols / 2, rows / 2), angle, 1)
+    # 计算输出图像的大小
+    cos = np.abs(M[0, 0])
+    sin = np.abs(M[0, 1])
+    new_cols = int(rows * sin + cols * cos)
+    new_rows = int(rows * cos + cols * sin)
+    M[0, 2] += (new_cols - cols) / 2
+    M[1, 2] += (new_rows - rows) / 2
+    # 执行仿射变换
+    rotated_img = cv2.warpAffine(x_axis_img, M, (new_cols, new_rows))
+    return rotated_img
+
+
+def morphology_method(img) -> int:
+    # 读取图像
+    should_invert = background_is_grey_or_black(img)
+    if should_invert:
+        img = invert_img(img)
+    img = cv2.resize(img, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+    img_height, img_width, _ = img.shape
+    # 转换为灰度图像
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    if DEBUG_MODE:
+        cv2.imshow('gray', gray)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))  # 创建CLAHE对象
+    gray = clahe.apply(gray)  # 自适应直方图均衡化
+    # 阈值处理
+    thresh = cv2.threshold(gray, 80 if should_invert else 150, 255, cv2.THRESH_BINARY)[1]
+    # 形态学操作
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7))
+    morph = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
+    if DEBUG_MODE:
+        cv2.imshow('morph', morph)
+    # 轮廓检测
+    contours, hierarchy = cv2.findContours(morph, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    total_area = 0
+    area_cnt = 0
+    for contour in contours:
+        # 计算轮廓的矩形边界框
+        rect = cv2.minAreaRect(contour)
+        # 计算矩形宽度和高度
+        width = rect[1][0]
+        height = rect[1][1]
+        # 进行矩形检查
+        area = width * height
+        if area > img_width * img_height * 0.5:
+            continue
+        area_cnt += 1
+        total_area += area
+    aver_area = total_area / (area_cnt if area_cnt > 0 else 1)
+
+    negative_45_cnt = 0
+    positive_45_cnt = 0
+    negative_90_cnt = 0
+    zero_cnt = 0
+    # 遍历轮廓
+    for contour in contours:
+        # 计算轮廓的矩形边界框
+        rect = cv2.minAreaRect(contour)
+        box = cv2.boxPoints(rect)
+        box = np.intp(box)  # box是左下 左上 右上 右下的坐标顺序
+        x1, y1 = box[0]
+        x2, y2 = box[3]
+        # 计算矩形宽度和高度
+        width = rect[1][0]
+        height = rect[1][1]
+        # 进行矩形检查
+        area = width * height
+        if area > img_width * img_height * 0.5 or area < 10 or area < aver_area:
+            continue
+        atan2 = math.atan2(y2 - y1, x2 - x1)
+        angle = atan2 / math.pi * 180
+        if height > width and -5 < angle < 5:
+            angle = -90
+        if -50 < angle < -40:
+            negative_45_cnt += 1
+        elif 40 < angle < 50:
+            positive_45_cnt += 1
+        elif -95 < angle < -85:
+            negative_90_cnt += 1
+        elif -5 < angle < 5:
+            zero_cnt += 1
+        if DEBUG_MODE:
+            cv2.drawContours(img, [box], 0, (0, 255, 0), 2)
+    zero_cnt = max(zero_cnt, 1)
+    if negative_45_cnt / zero_cnt >= 0.5:
+        return -45
+    elif positive_45_cnt / zero_cnt >= 0.5:
+        return +45
+    elif negative_90_cnt / zero_cnt >= 0.5:
+        return -90
+    else:
+        return 0
+
+
+def get_x_axis_angle(img) -> int:
+    return morphology_method(img)
+
+
+def is_value(value_string) -> bool:
+    s = value_string.split('.')
+    if len(s) > 2:
+        return False
+    else:
+        for si in s:
+            if not si.isdigit():
+                return False
+        return True
+
+
+def filter_bar(rect, box, img, intersection):
+    img_height, img_width, _ = img.shape
+    # 计算矩形宽度和高度
+    width = rect[1][0]
+    height = rect[1][1]
+    # 进行矩形检查
+    area = width * height
+    # 剔除小的噪声矩形，剔除最外围的包括整个图像的矩形
+    if 100 <= area < img_width * img_height * 0.1 and box[0][0] > intersection[0]:
+        return True
+
+
+def split_bar(img):
+    # 转换为灰度图像
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    # 自适应直方图均衡化
+    clahe = cv2.createCLAHE(clipLimit=7.0, tileGridSize=(8, 8))  # 创建CLAHE对象
+    gray = clahe.apply(gray)
+    # 阈值处理
+    thresh = cv2.threshold(gray, 170, 255, cv2.THRESH_BINARY)[1]
+    # 形态学操作
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+    morph = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+    # 轮廓检测
+    contours, hierarchy = cv2.findContours(morph, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    contours = sorted(contours, key=lambda c: cv2.boundingRect(c)[0])
+    return contours
+
 
 class VerticalBarReader(AbstractGraphReader):
     def __init__(self):
@@ -17,13 +242,7 @@ class VerticalBarReader(AbstractGraphReader):
         self.reader = easyocr.Reader(['en'])
 
     @staticmethod
-    def is_horizontal_line(y1, y2):
-        if y1 == y2:
-            return True
-        return False
-
-    @staticmethod
-    def get_x_axis_angle(img) -> int:
+    def hough_method(img) -> int:
         detect_img = np.copy(img)
         # 转换为灰度
         gray = cv2.cvtColor(detect_img, cv2.COLOR_BGR2GRAY)
@@ -39,14 +258,14 @@ class VerticalBarReader(AbstractGraphReader):
             x1, y1, x2, y2 = line[0]
             atan2 = math.atan2(y2 - y1, x2 - x1)
             angle = atan2 / math.pi * 180
-            # print(f'angle = {angle}')
             if -50 < angle < -40:
                 negative_45_cnt = negative_45_cnt + 1
             elif 40 < angle < 50:
                 positive_45_cnt = positive_45_cnt + 1
             # cv2.line(detect_img, (x1, y1), (x2, y2), (0, 0, 255), 2)
         # 显示结果
-        # cv2.imshow('detect_img', detect_img)
+        if DEBUG_MODE:
+            cv2.imshow('detect_img', detect_img)
         if negative_45_cnt >= 2:
             return -45
         if positive_45_cnt >= 2:
@@ -54,27 +273,21 @@ class VerticalBarReader(AbstractGraphReader):
         return 0
 
     def read_x_axis(self, x_axis_img) -> List[str]:
-        angle = self.get_x_axis_angle(x_axis_img)
-        rows, cols = x_axis_img.shape[:2]
-        # 计算旋转矩阵
-        M = cv2.getRotationMatrix2D((cols / 2, rows / 2), angle, 1)
-
-        # 计算输出图像的大小
-        cos = np.abs(M[0, 0])
-        sin = np.abs(M[0, 1])
-        new_cols = int(rows * sin + cols * cos)
-        new_rows = int(rows * cos + cols * sin)
-        M[0, 2] += (new_cols - cols) / 2
-        M[1, 2] += (new_rows - rows) / 2
-
-        # 执行仿射变换
-        rotated_img = cv2.warpAffine(x_axis_img, M, (new_cols, new_rows))
+        angle = get_x_axis_angle(x_axis_img)
+        if DEBUG_MODE:
+            print(f'angle = {angle}')
+        rotated_img = rotate_x_axis_img(x_axis_img, angle)
         resize_x_axis_img = cv2.resize(rotated_img, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
-        # cv2.namedWindow('x_axis_img')
-        # cv2.imshow('x_axis_img', resize_x_axis_img)
+        if DEBUG_MODE:
+            cv2.imshow('x_axis_img', resize_x_axis_img)
         # 读取图片并进行识别
         ocr_result = self.reader.readtext(resize_x_axis_img)
-        ocr_result = sorted(ocr_result, key=lambda c: c[0][0][1])
+        if angle == -45:
+            ocr_result = sorted(ocr_result, key=lambda c: c[0][0][1])
+        elif angle == 45:
+            ocr_result = sorted(ocr_result, key=lambda c: -c[0][0][1])
+        else:
+            ocr_result = sorted(ocr_result, key=lambda c: c[0][0][0])
         x_axis_result = []
         # 输出识别结果
         for r in ocr_result:
@@ -89,33 +302,23 @@ class VerticalBarReader(AbstractGraphReader):
         # 先放大，若不放大easyOCR的识别度较低
         resize_factor = 2
         resized = cv2.resize(y_axis_img, None, fx=resize_factor, fy=resize_factor, interpolation=cv2.INTER_CUBIC)
-        # cv2.namedWindow('get_value_per_pixel')
-        # cv2.imshow('get_value_per_pixel', resized)
+        if DEBUG_MODE:
+            cv2.imshow('get_value_per_pixel', resized)
         ocr_result = self.reader.readtext(resized)
         reference_math = None
         for r in ocr_result:
-            if r[1].isdigit() and r[2] >= 0.8 and r[0][0][1] < self.intersection[1]:
+            if is_value(r[1]) and r[2] >= 0.8 and r[0][0][1] < self.intersection[1]:
                 reference_math = r
                 break
         if reference_math is None:
             raise LookupError("未定位到数字")
         reference_math_pos = reference_math[0]
         reference_math_value = reference_math[1]
-        value_per_pixel = int(reference_math_value) / (self.intersection[1] - reference_math_pos[0][1])
+        value_per_pixel = float(reference_math_value) / (self.intersection[1] - reference_math_pos[0][1])
         return value_per_pixel / resize_factor
 
     def read_bar(self, img, value_per_pixel) -> List[str]:
-        img_height, img_width, _ = img.shape
-        # 转换为灰度图像
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        # 阈值处理
-        thresh = cv2.threshold(gray, 170, 255, cv2.THRESH_BINARY)[1]
-        # 形态学操作
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-        morph = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
-        # 轮廓检测
-        contours, hierarchy = cv2.findContours(morph, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        contours = sorted(contours, key=lambda c: cv2.boundingRect(c)[0])
+        contours = split_bar(img)
         y_axis_result: List[str] = []
         # 遍历轮廓
         for contour in contours:
@@ -124,17 +327,19 @@ class VerticalBarReader(AbstractGraphReader):
             box = cv2.boxPoints(rect)
             box = np.intp(box)  # box是左下 左上 右上 右下的坐标顺序
             # 计算矩形宽度和高度
-            width = rect[1][0]
-            height = rect[1][1]
-            # 进行矩形检查
-            if width * height < img_width * img_height * 0.1:
+            if filter_bar(rect, box, img, self.intersection):
                 v = (self.intersection[1] - box[1][1]) * value_per_pixel
                 y_axis_result.append(str(v))
                 # print(box)
-                # cv2.drawContours(img, [box], 0, (0, 255, 0), 2)
+                if DEBUG_MODE:
+                    cv2.drawContours(img, [box], 0, (0, 255, 0), 2)
+        if DEBUG_MODE:
+            cv2.imshow("read_bar", img)
         return y_axis_result
 
-    def get_id(self, filepath) -> str:
+
+    @staticmethod
+    def get_id(filepath) -> str:
         # 获取文件名（包含扩展名）
         filename = os.path.basename(filepath)
         # 去除扩展名
@@ -144,29 +349,17 @@ class VerticalBarReader(AbstractGraphReader):
     def read_graph(self, filepath) -> ReadResult:
         # 读取图片
         img = cv2.imread(filepath)
-        # 转换为灰度图像
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        # 边缘检测
-        edges = cv2.Canny(gray, 50, 150, apertureSize=3)
-        # 直线检测
-        lines = cv2.HoughLinesP(edges, rho=1, theta=np.pi / 180, threshold=100, minLineLength=100, maxLineGap=3)
-
-        horizontal_lines = []
-        for line in lines:
-            x1, y1, x2, y2 = line[0]
-            if self.is_horizontal_line(y1, y2):
-                horizontal_lines.append((x1, y1, x2, y2))
-        horizontal_axis = max(horizontal_lines, key=lambda l: l[1])
-        intersection = (horizontal_axis[0], horizontal_axis[1])
+        intersection = get_intersection(img)
         self.intersection = intersection
-        height, width, channels = img.shape
-        y_axis_img = img[0:height, 0:intersection[0]]
+        y_axis_img = get_y_axis_img(img, intersection)
         value_per_pixel = self.get_value_per_pixel(y_axis_img)
         y_axis_result = self.read_bar(img, value_per_pixel)
-        x_axis_img = img[intersection[1]:height, 0:width]
+        x_axis_img = get_x_axis_img(img, intersection)
         x_axis_result = self.read_x_axis(x_axis_img)
         read_result: ReadResult = ReadResult()
         read_result.id = self.get_id(filepath)
+        # 这里让x轴和y轴读取的数据进行对齐
+        # min_len = min(len(x_axis_result), len(y_axis_result))
         read_result.x_series = x_axis_result
         read_result.y_series = y_axis_result
         read_result.chart_type = GraphType.VERTICAL_BAR.value
@@ -174,9 +367,12 @@ class VerticalBarReader(AbstractGraphReader):
 
 
 if __name__ == '__main__':
+    DEBUG_MODE = True
     graph_reader = VerticalBarReader()
-    read_result = graph_reader.read_graph("dataset/train/images/000e8130e62a.jpg")
-    print(read_result)
-
+    try:
+        read_result = graph_reader.read_graph("dataset/train/images/1a5070a31ebc.jpg")
+        print(read_result)
+    except LookupError as e:
+        print(e)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
