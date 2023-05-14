@@ -89,11 +89,11 @@ def get_intersection(img):
     if DEBUG_MODE:
         cv2.imshow('intersection_img', intersection_img)
     if len(horizontal_lines) > 0:
-        horizontal_axis = max(horizontal_lines, key=lambda l: l[1])
+        horizontal_axis = max(horizontal_lines, key=lambda l: (abs(x2 - x1), l[1]))
         intersection = (horizontal_axis[0], horizontal_axis[1])
         return intersection
     elif len(vertical_lines) > 0:
-        vertical_axis = max(vertical_lines, key=lambda l: l[0])
+        vertical_axis = max(vertical_lines, key=lambda l: (abs(y2 - y1), l[0]))
         intersection = (vertical_axis[0], vertical_axis[1])
         return intersection
     raise LookupError("未定位到坐标轴原点")
@@ -338,8 +338,10 @@ class VerticalBarReader(AbstractGraphReader):
         angle = get_x_axis_angle(x_axis_img)
         if DEBUG_MODE:
             print(f'angle = {angle}')
-        rotated_img = rotate_x_axis_img(x_axis_img, angle)
-        resize_x_axis_img = cv2.resize(rotated_img, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+        rotated_img = rotate_x_axis_img(x_axis_img, angle)  # 如果不执行旋转变换，那么ocr可能会识别到断续的结果
+        resize_factor = 2
+        resize_x_axis_img = cv2.resize(rotated_img, None,
+                                       fx=resize_factor, fy=resize_factor, interpolation=cv2.INTER_CUBIC)
         if DEBUG_MODE:
             cv2.imshow('x_axis_img', resize_x_axis_img)
         # 读取图片并进行识别
@@ -348,15 +350,29 @@ class VerticalBarReader(AbstractGraphReader):
             ocr_result = sorted(ocr_result, key=lambda c: c[0][0][1])
         elif angle == 45:
             ocr_result = sorted(ocr_result, key=lambda c: -c[0][0][1])
+        elif angle == 0:
+            ocr_result = sorted(ocr_result, key=lambda c: c[0][0][0])
         else:
             ocr_result = sorted(ocr_result, key=lambda c: c[0][0][0])
         x_axis_result = []
+        aver_ocr_result_y = 0
+        if angle == 0:
+            ocr_result_y_cnt = 0
+            ocr_result_y_sum = 0
+            for r in ocr_result:
+                ocr_result_y_sum += r[0][0][1]
+                ocr_result_y_cnt += 1
+            aver_ocr_result_y = ocr_result_y_sum / ocr_result_y_cnt if ocr_result_y_cnt > 0 else 1
+        if DEBUG_MODE:
+            print(f'ocr_result = {ocr_result}')
         # 输出识别结果
         for r in ocr_result:
             # r[0]表示文本行的四个顶点坐标，按照左上、右上、右下、左下的顺序排列。
             # r[1]表示字符串
             # r[2]表示置信度
-            if abs(r[0][0][1] - r[0][1][1]) < 5:  # 只取水平线方向的文本
+            if abs(r[0][0][1] - r[0][1][1]) < 5 and r[2] >= 0.3:  # 只取水平线方向的文本
+                if angle == 0 and r[0][0][1] > aver_ocr_result_y:
+                    continue
                 x_axis_result.append(r[1])
         return x_axis_result
 
@@ -426,7 +442,7 @@ if __name__ == '__main__':
     DEBUG_MODE = True
     graph_reader = VerticalBarReader()
     try:
-        read_result = graph_reader.read_graph("dataset/train/images/1aa8af23afa2.jpg")
+        read_result = graph_reader.read_graph("dataset/train/images/0aa70ffb057f.jpg")
         print(read_result)
     except LookupError as e:
         print(e)
