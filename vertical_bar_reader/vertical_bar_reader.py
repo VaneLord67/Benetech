@@ -220,9 +220,11 @@ def filter_bar(rect, box, img, intersection):
     height = rect[1][1]
     # 进行矩形检查
     area = width * height
+    img_area = img_width * img_height
     # 剔除小的噪声矩形，剔除最外围的包括整个图像的矩形
-    if 30 <= area < img_width * img_height * 0.1 and box[0][0] > intersection[0] and box[0][1] <= intersection[1]:
+    if 30 <= area < img_area * 0.1 and box[0][0] > intersection[0] and box[0][1] <= intersection[1]:
         return True
+    return False
 
 
 def is_bar_domain(l, intersection) -> bool:
@@ -235,8 +237,9 @@ def is_bar_domain(l, intersection) -> bool:
 
 
 def split_bar_line_method(img, intersection):
+    split_bar_line_img = np.copy(img)
     # 转换为灰度图像
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    gray = cv2.cvtColor(split_bar_line_img, cv2.COLOR_BGR2GRAY)
     # 边缘检测
     edges = cv2.Canny(gray, 50, 150, apertureSize=3)
     # 直线检测
@@ -256,15 +259,16 @@ def split_bar_line_method(img, intersection):
             if len(dot_group) == 2:
                 bars.append((dot_group[0], dot_group[1]))
                 dot_group = []
-            cv2.line(img, (x1, y1), (x2, y2), (0, 0, 255), 2)
+            cv2.line(split_bar_line_img, (x1, y1), (x2, y2), (0, 0, 255), 2)
     if DEBUG_MODE:
-        cv2.imshow("read_bar", img)
-        cv2.setMouseCallback('read_bar', on_mouse)
+        cv2.imshow("split_bar_line_img", split_bar_line_img)
+        cv2.setMouseCallback('split_bar_line_img', on_mouse)
         print(f'bars = {bars}')
     return bars
 
 
 def split_bar_contour_method(img, intersection):
+    split_bar_contour_method_img = np.copy(img)
     # 转换为灰度图像
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     # 自适应直方图均衡化
@@ -288,7 +292,9 @@ def split_bar_contour_method(img, intersection):
         if filter_bar(rect, box, img, intersection):
             bars.append((box[1], box[2]))
             if DEBUG_MODE:
-                cv2.drawContours(img, [box], 0, (0, 255, 0), 2)
+                cv2.drawContours(split_bar_contour_method_img, [box], 0, (0, 255, 0), 2)
+    if DEBUG_MODE:
+        cv2.imshow('split_bar_contour_method_img', split_bar_contour_method_img)
     return bars
 
 
@@ -381,7 +387,7 @@ class VerticalBarReader(AbstractGraphReader):
         y_axis_result: List[str] = []
         # 遍历轮廓
         for bar in bars:
-            v = (self.intersection[1] - bar[1][1]) * value_per_pixel
+            v = (self.intersection[1] - min(bar[1][1], bar[0][1])) * value_per_pixel
             y_axis_result.append(str(v))
             # print(box)
         if DEBUG_MODE:
@@ -420,7 +426,7 @@ if __name__ == '__main__':
     DEBUG_MODE = True
     graph_reader = VerticalBarReader()
     try:
-        read_result = graph_reader.read_graph("dataset/train/images/1a5070a31ebc.jpg")
+        read_result = graph_reader.read_graph("dataset/train/images/1aa8af23afa2.jpg")
         print(read_result)
     except LookupError as e:
         print(e)
