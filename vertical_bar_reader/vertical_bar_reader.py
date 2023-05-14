@@ -13,6 +13,11 @@ from read_result import ReadResult
 DEBUG_MODE = True
 
 
+def on_mouse(event, x, y, flag, param):
+    if event == cv2.EVENT_LBUTTONUP:
+        print("鼠标左键单击：(%d, %d)" % (x, y))
+
+
 def is_horizontal_line(y1, y2):
     if y1 == y2:
         return True
@@ -120,7 +125,8 @@ def morphology_method(img) -> int:
     # 转换为灰度图像
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     if DEBUG_MODE:
-        cv2.imshow('gray', gray)
+        # cv2.imshow('gray', gray)
+        pass
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))  # 创建CLAHE对象
     gray = clahe.apply(gray)  # 自适应直方图均衡化
     # 阈值处理
@@ -215,11 +221,50 @@ def filter_bar(rect, box, img, intersection):
     # 进行矩形检查
     area = width * height
     # 剔除小的噪声矩形，剔除最外围的包括整个图像的矩形
-    if 100 <= area < img_width * img_height * 0.1 and box[0][0] > intersection[0]:
+    if 30 <= area < img_width * img_height * 0.1 and box[0][0] > intersection[0] and box[0][1] <= intersection[1]:
         return True
 
 
-def split_bar(img):
+def is_bar_domain(l, intersection) -> bool:
+    x1, y1, x2, y2 = l
+    y = max(y1, y2)
+    x = min(x1, x2)
+    if x > intersection[0] and abs(y - intersection[1]) < 5:
+        return True
+    return False
+
+
+def split_bar_line_method(img, intersection):
+    # 转换为灰度图像
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    # 边缘检测
+    edges = cv2.Canny(gray, 50, 150, apertureSize=3)
+    # 直线检测
+    lines = cv2.HoughLinesP(edges, rho=1, theta=np.pi / 180, threshold=50, minLineLength=3, maxLineGap=3)
+    lines = sorted(lines, key=lambda k: k[0][0])  # 按x排列
+    bars = []
+    dot_group = []
+    # 在原始图像上绘制直线
+    for line in lines:
+        x1, y1, x2, y2 = line[0]
+        if y1 <= y2:
+            dot = (x1, y1)
+        else:
+            dot = (x2, y2)
+        if is_vertical_line(x1, x2) and is_bar_domain((line[0]), intersection):
+            dot_group.append(dot)
+            if len(dot_group) == 2:
+                bars.append((dot_group[0], dot_group[1]))
+                dot_group = []
+            cv2.line(img, (x1, y1), (x2, y2), (0, 0, 255), 2)
+    if DEBUG_MODE:
+        cv2.imshow("read_bar", img)
+        cv2.setMouseCallback('read_bar', on_mouse)
+        print(f'bars = {bars}')
+    return bars
+
+
+def split_bar_contour_method(img, intersection):
     # 转换为灰度图像
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     # 自适应直方图均衡化
@@ -233,7 +278,18 @@ def split_bar(img):
     # 轮廓检测
     contours, hierarchy = cv2.findContours(morph, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     contours = sorted(contours, key=lambda c: cv2.boundingRect(c)[0])
-    return contours
+
+    bars = []
+    for contour in contours:
+        # 计算轮廓的矩形边界框
+        rect = cv2.minAreaRect(contour)
+        box = cv2.boxPoints(rect)
+        box = np.intp(box)  # box是左下 左上 右上 右下的坐标顺序
+        if filter_bar(rect, box, img, intersection):
+            bars.append((box[1], box[2]))
+            if DEBUG_MODE:
+                cv2.drawContours(img, [box], 0, (0, 255, 0), 2)
+    return bars
 
 
 class VerticalBarReader(AbstractGraphReader):
@@ -302,8 +358,6 @@ class VerticalBarReader(AbstractGraphReader):
         # 先放大，若不放大easyOCR的识别度较低
         resize_factor = 2
         resized = cv2.resize(y_axis_img, None, fx=resize_factor, fy=resize_factor, interpolation=cv2.INTER_CUBIC)
-        if DEBUG_MODE:
-            cv2.imshow('get_value_per_pixel', resized)
         ocr_result = self.reader.readtext(resized)
         reference_math = None
         for r in ocr_result:
@@ -313,30 +367,26 @@ class VerticalBarReader(AbstractGraphReader):
         if reference_math is None:
             raise LookupError("未定位到数字")
         reference_math_pos = reference_math[0]
+        reference_math_pos = [[x / resize_factor for x in sub_list] for sub_list in reference_math_pos]
         reference_math_value = reference_math[1]
         value_per_pixel = float(reference_math_value) / (self.intersection[1] - reference_math_pos[0][1])
-        return value_per_pixel / resize_factor
+        if DEBUG_MODE:
+            cv2.imshow('get_value_per_pixel', resized)
+            print(f'定位到数字: {reference_math_value}, 位置: {reference_math_pos}')
+            print(f'value_per_pixel = {value_per_pixel}')
+        return value_per_pixel
 
     def read_bar(self, img, value_per_pixel) -> List[str]:
-        contours = split_bar(img)
+        bars = split_bar_line_method(img, self.intersection)
         y_axis_result: List[str] = []
         # 遍历轮廓
-        for contour in contours:
-            # 计算轮廓的矩形边界框
-            rect = cv2.minAreaRect(contour)
-            box = cv2.boxPoints(rect)
-            box = np.intp(box)  # box是左下 左上 右上 右下的坐标顺序
-            # 计算矩形宽度和高度
-            if filter_bar(rect, box, img, self.intersection):
-                v = (self.intersection[1] - box[1][1]) * value_per_pixel
-                y_axis_result.append(str(v))
-                # print(box)
-                if DEBUG_MODE:
-                    cv2.drawContours(img, [box], 0, (0, 255, 0), 2)
+        for bar in bars:
+            v = (self.intersection[1] - bar[1][1]) * value_per_pixel
+            y_axis_result.append(str(v))
+            # print(box)
         if DEBUG_MODE:
             cv2.imshow("read_bar", img)
         return y_axis_result
-
 
     @staticmethod
     def get_id(filepath) -> str:
