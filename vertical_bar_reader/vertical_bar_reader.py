@@ -115,18 +115,16 @@ def rotate_x_axis_img(x_axis_img, angle):
     return rotated_img
 
 
-def morphology_method(img) -> int:
+def morphology_method(x_axis_img) -> int:
     # 读取图像
-    should_invert = background_is_grey_or_black(img)
+    should_invert = background_is_grey_or_black(x_axis_img)
     if should_invert:
-        img = invert_img(img)
-    img = cv2.resize(img, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
-    img_height, img_width, _ = img.shape
+        x_axis_img = invert_img(x_axis_img)
+    resize_factor = 3
+    x_axis_img = cv2.resize(x_axis_img, None, fx=resize_factor, fy=resize_factor, interpolation=cv2.INTER_CUBIC)
+    img_height, img_width, _ = x_axis_img.shape
     # 转换为灰度图像
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    if DEBUG_MODE:
-        # cv2.imshow('gray', gray)
-        pass
+    gray = cv2.cvtColor(x_axis_img, cv2.COLOR_BGR2GRAY)
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))  # 创建CLAHE对象
     gray = clahe.apply(gray)  # 自适应直方图均衡化
     # 阈值处理
@@ -134,8 +132,6 @@ def morphology_method(img) -> int:
     # 形态学操作
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7))
     morph = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
-    if DEBUG_MODE:
-        cv2.imshow('morph', morph)
     # 轮廓检测
     contours, hierarchy = cv2.findContours(morph, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     total_area = 0
@@ -164,8 +160,6 @@ def morphology_method(img) -> int:
         rect = cv2.minAreaRect(contour)
         box = cv2.boxPoints(rect)
         box = np.intp(box)  # box是左下 左上 右上 右下的坐标顺序
-        x1, y1 = box[0]
-        x2, y2 = box[3]
         # 计算矩形宽度和高度
         width = rect[1][0]
         height = rect[1][1]
@@ -173,6 +167,14 @@ def morphology_method(img) -> int:
         area = width * height
         if area > img_width * img_height * 0.5 or area < 10 or area < aver_area:
             continue
+        distance1 = cv2.norm(np.array(box[0]), np.array(box[1]), cv2.NORM_L2)
+        distance2 = cv2.norm(np.array(box[1]), np.array(box[2]), cv2.NORM_L2)
+        if distance1 > distance2:
+            x1, y1 = box[0]
+            x2, y2 = box[1]
+        else:
+            x1, y1 = box[1]
+            x2, y2 = box[2]
         atan2 = math.atan2(y2 - y1, x2 - x1)
         angle = atan2 / math.pi * 180
         if height > width and -5 < angle < 5:
@@ -186,8 +188,10 @@ def morphology_method(img) -> int:
         elif -5 < angle < 5:
             zero_cnt += 1
         if DEBUG_MODE:
-            cv2.drawContours(img, [box], 0, (0, 255, 0), 2)
+            cv2.drawContours(x_axis_img, [box], 0, (0, 255, 0), 2)
     zero_cnt = max(zero_cnt, 1)
+    if DEBUG_MODE:
+        cv2.imshow('get_x_angle_img', x_axis_img)
     if negative_45_cnt / zero_cnt >= 0.5:
         return -45
     elif positive_45_cnt / zero_cnt >= 0.5:
@@ -442,7 +446,8 @@ if __name__ == '__main__':
     DEBUG_MODE = True
     graph_reader = VerticalBarReader()
     try:
-        read_result = graph_reader.read_graph("dataset/train/images/0aa70ffb057f.jpg")
+        # 0aa70ffb057f
+        read_result = graph_reader.read_graph("dataset/train/images/000e8130e62a.jpg")
         print(read_result)
     except LookupError as e:
         print(e)
