@@ -5,12 +5,29 @@ from typing import List
 import cv2
 import easyocr
 import numpy as np
+from ultralytics import YOLO
 
 from abstract_graph_reader import AbstractGraphReader
 from graph_classifier.graph_classifier import GraphType
 from read_result import ReadResult
 
 DEBUG_MODE = True
+
+
+def data_align(x_axis_result_pos_x, bars, y_axis_result):
+    align_y_axis_result = []
+    for pos_x in x_axis_result_pos_x:
+        flag = False
+        for i in range(len(bars)):
+            bar = bars[i]
+            if bar[0][0] <= pos_x <= bar[1][0]:
+                align_y_axis_result.append(y_axis_result[i])
+                flag = True
+                break
+        if not flag:
+            align_y_axis_result.append('0')
+
+    return align_y_axis_result
 
 
 def on_mouse(event, x, y, flag, param):
@@ -99,20 +116,25 @@ def get_intersection(img):
     raise LookupError("未定位到坐标轴原点")
 
 
-def rotate_x_axis_img(x_axis_img, angle):
-    rows, cols = x_axis_img.shape[:2]
-    # 计算旋转矩阵
-    M = cv2.getRotationMatrix2D((cols / 2, rows / 2), angle, 1)
-    # 计算输出图像的大小
-    cos = np.abs(M[0, 0])
-    sin = np.abs(M[0, 1])
-    new_cols = int(rows * sin + cols * cos)
-    new_rows = int(rows * cos + cols * sin)
-    M[0, 2] += (new_cols - cols) / 2
-    M[1, 2] += (new_rows - rows) / 2
-    # 执行仿射变换
-    rotated_img = cv2.warpAffine(x_axis_img, M, (new_cols, new_rows))
-    return rotated_img
+def rotate_image(img, angle):
+    height, width = img.shape[:2]
+    rotation_angle_radian = np.deg2rad(angle)
+
+    new_width = int(width * np.abs(np.cos(rotation_angle_radian)) + height * np.abs(np.sin(rotation_angle_radian)))
+    new_height = int(width * np.abs(np.sin(rotation_angle_radian)) + height * np.abs(np.cos(rotation_angle_radian)))
+
+    rotation_matrix = cv2.getRotationMatrix2D((width / 2, height / 2), angle, 1)
+    rotation_matrix[0, 2] += (new_width - width) / 2
+    rotation_matrix[1, 2] += (new_height - height) / 2
+
+    rotated_img = cv2.warpAffine(img, rotation_matrix, (new_width, new_height))
+    return rotated_img, rotation_matrix
+
+
+def rotate_point(point, rotation_matrix):
+    point = np.array([[point[0]], [point[1]], [1]])
+    transformed_point = np.dot(rotation_matrix, point)
+    return int(transformed_point[0]), int(transformed_point[1])
 
 
 def morphology_method(x_axis_img) -> int:
@@ -240,6 +262,19 @@ def is_bar_domain(l, intersection) -> bool:
     return False
 
 
+def split_bar_yolo_method(img, yolo_model):
+    res = yolo_model(img)
+    bars = []
+    boxes = sorted(res[0].boxes, key=lambda b: b.xyxy[0][0].item())
+    for box in boxes:
+        # box.xyxy的顺序是左上的x坐标 y坐标；右下的x坐标 y坐标
+        bars.append(((box.xyxy[0][0].item(), box.xyxy[0][1].item()), (box.xyxy[0][2].item(), box.xyxy[0][1].item())))
+    if DEBUG_MODE:
+        res_plotted = res[0].plot()
+        cv2.imshow("split_bar_yolo_method", res_plotted)
+    return bars
+
+
 def split_bar_line_method(img, intersection):
     split_bar_line_img = np.copy(img)
     # 转换为灰度图像
@@ -306,6 +341,7 @@ class VerticalBarReader(AbstractGraphReader):
     def __init__(self):
         self.intersection = (0, 0)  # 坐标轴原点
         self.reader = easyocr.Reader(['en'])
+        self.yolo_model = YOLO('./vertical_bar_reader/best.pt')
 
     @staticmethod
     def hough_method(img) -> int:
@@ -338,11 +374,11 @@ class VerticalBarReader(AbstractGraphReader):
             return 45
         return 0
 
-    def read_x_axis(self, x_axis_img) -> List[str]:
+    def read_x_axis(self, x_axis_img) -> (List[str], List[int]):
         angle = get_x_axis_angle(x_axis_img)
         if DEBUG_MODE:
             print(f'angle = {angle}')
-        rotated_img = rotate_x_axis_img(x_axis_img, angle)  # 如果不执行旋转变换，那么ocr可能会识别到断续的结果
+        rotated_img, rotation_matrix = rotate_image(x_axis_img, angle)  # 如果不执行旋转变换，那么ocr可能会识别到断续的结果
         resize_factor = 2
         resize_x_axis_img = cv2.resize(rotated_img, None,
                                        fx=resize_factor, fy=resize_factor, interpolation=cv2.INTER_CUBIC)
@@ -370,15 +406,34 @@ class VerticalBarReader(AbstractGraphReader):
         if DEBUG_MODE:
             print(f'ocr_result = {ocr_result}')
         # 输出识别结果
+        x_axis_result_pos_x = []
         for r in ocr_result:
             # r[0]表示文本行的四个顶点坐标，按照左上、右上、右下、左下的顺序排列。
             # r[1]表示字符串
             # r[2]表示置信度
-            if abs(r[0][0][1] - r[0][1][1]) < 5 and r[2] >= 0.3:  # 只取水平线方向的文本
+            if abs(r[0][0][1] - r[0][1][1]) < 5:  # 只取水平线方向的文本
                 if angle == 0 and r[0][0][1] > aver_ocr_result_y:
                     continue
+                rotation_matrix_3x3 = np.vstack([rotation_matrix, [0, 0, 1]])  # 添加齐次坐标的最后一行
+                rotation_matrix_inv = np.linalg.inv(rotation_matrix_3x3)
+                if angle == -45:
+                    result_pos_x = r[0][1][0]
+                    result_pos_y = r[0][1][1]
+                elif angle == 45:
+                    result_pos_x = r[0][0][0]
+                    result_pos_y = r[0][0][1]
+                elif angle == 0:
+                    result_pos_x = (r[0][0][0] + r[0][1][0]) / 2
+                    result_pos_y = (r[0][0][1] + r[0][1][1]) / 2
+                elif angle == -90:
+                    result_pos_x = (r[0][0][0] + r[0][1][0]) / 2
+                    result_pos_y = (r[0][0][1] + r[0][1][1]) / 2
+                else:
+                    raise LookupError("unsupported angle")
+                original_x, original_y = rotate_point((result_pos_x / resize_factor, result_pos_y / resize_factor), rotation_matrix_inv)
+                x_axis_result_pos_x.append(original_x)
                 x_axis_result.append(r[1])
-        return x_axis_result
+        return x_axis_result, x_axis_result_pos_x
 
     def get_value_per_pixel(self, y_axis_img) -> int:
         # 先放大，若不放大easyOCR的识别度较低
@@ -402,17 +457,16 @@ class VerticalBarReader(AbstractGraphReader):
             print(f'value_per_pixel = {value_per_pixel}')
         return value_per_pixel
 
-    def read_bar(self, img, value_per_pixel) -> List[str]:
-        bars = split_bar_line_method(img, self.intersection)
+    def read_bar(self, img, value_per_pixel) -> (List[str], List[int]):
+        bars = split_bar_yolo_method(img, self.yolo_model)
+        # bars = split_bar_line_method(img, self.intersection)
         y_axis_result: List[str] = []
         # 遍历轮廓
         for bar in bars:
             v = (self.intersection[1] - min(bar[1][1], bar[0][1])) * value_per_pixel
             y_axis_result.append(str(v))
             # print(box)
-        if DEBUG_MODE:
-            cv2.imshow("read_bar", img)
-        return y_axis_result
+        return y_axis_result, bars
 
     @staticmethod
     def get_id(filepath) -> str:
@@ -423,33 +477,33 @@ class VerticalBarReader(AbstractGraphReader):
         return filename_without_ext
 
     def read_graph(self, filepath) -> ReadResult:
-        # 读取图片
-        img = cv2.imread(filepath)
-        intersection = get_intersection(img)
-        self.intersection = intersection
-        y_axis_img = get_y_axis_img(img, intersection)
-        value_per_pixel = self.get_value_per_pixel(y_axis_img)
-        y_axis_result = self.read_bar(img, value_per_pixel)
-        x_axis_img = get_x_axis_img(img, intersection)
-        x_axis_result = self.read_x_axis(x_axis_img)
         read_result: ReadResult = ReadResult()
         read_result.id = self.get_id(filepath)
-        # 这里让x轴和y轴读取的数据进行对齐
-        # min_len = min(len(x_axis_result), len(y_axis_result))
-        read_result.x_series = x_axis_result
-        read_result.y_series = y_axis_result
         read_result.chart_type = GraphType.VERTICAL_BAR.value
-        return read_result
+        try:
+            # 读取图片
+            img = cv2.imread(filepath)
+            intersection = get_intersection(img)
+            self.intersection = intersection
+            y_axis_img = get_y_axis_img(img, intersection)
+            value_per_pixel = self.get_value_per_pixel(y_axis_img)
+            y_axis_result, bars = self.read_bar(img, value_per_pixel)
+            x_axis_img = get_x_axis_img(img, intersection)
+            x_axis_result, x_axis_result_pos_x = self.read_x_axis(x_axis_img)
+            y_axis_result = data_align(x_axis_result_pos_x, bars, y_axis_result)
+            read_result.x_series = x_axis_result
+            read_result.y_series = y_axis_result
+            return read_result
+        except LookupError as e:
+            print(e)
+            return read_result
 
 
 if __name__ == '__main__':
     DEBUG_MODE = True
     graph_reader = VerticalBarReader()
-    try:
-        # 0aa70ffb057f
-        read_result = graph_reader.read_graph("dataset/train/images/000e8130e62a.jpg")
-        print(read_result)
-    except LookupError as e:
-        print(e)
+    # 0aa70ffb057f
+    read_result = graph_reader.read_graph("dataset/train/images/0aa70ffb057f.jpg")
+    print(read_result)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
