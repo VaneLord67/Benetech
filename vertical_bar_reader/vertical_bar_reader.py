@@ -272,6 +272,7 @@ def split_bar_yolo_method(img, yolo_model):
     if DEBUG_MODE:
         res_plotted = res[0].plot()
         cv2.imshow("split_bar_yolo_method", res_plotted)
+        print(f'bars = {bars}')
     return bars
 
 
@@ -392,8 +393,8 @@ class VerticalBarReader(AbstractGraphReader):
             ocr_result = sorted(ocr_result, key=lambda c: -c[0][0][1])
         elif angle == 0:
             ocr_result = sorted(ocr_result, key=lambda c: c[0][0][0])
-        else:
-            ocr_result = sorted(ocr_result, key=lambda c: c[0][0][0])
+        elif angle == -90:
+            ocr_result = sorted(ocr_result, key=lambda c: c[0][0][1])
         x_axis_result = []
         aver_ocr_result_y = 0
         if angle == 0:
@@ -427,12 +428,15 @@ class VerticalBarReader(AbstractGraphReader):
                     result_pos_y = (r[0][0][1] + r[0][1][1]) / 2
                 elif angle == -90:
                     result_pos_x = (r[0][0][0] + r[0][1][0]) / 2
-                    result_pos_y = (r[0][0][1] + r[0][1][1]) / 2
+                    result_pos_y = (r[0][0][1] + r[0][3][1]) / 2
                 else:
                     raise LookupError("unsupported angle")
-                original_x, original_y = rotate_point((result_pos_x / resize_factor, result_pos_y / resize_factor), rotation_matrix_inv)
+                original_x, original_y = rotate_point((result_pos_x / resize_factor, result_pos_y / resize_factor),
+                                                      rotation_matrix_inv)
                 x_axis_result_pos_x.append(original_x)
                 x_axis_result.append(r[1])
+        if DEBUG_MODE:
+            print(f'x_axis_result_pos_x = {x_axis_result_pos_x}')
         return x_axis_result, x_axis_result_pos_x
 
     def get_value_per_pixel(self, y_axis_img) -> int:
@@ -503,7 +507,8 @@ if __name__ == '__main__':
     DEBUG_MODE = True
     graph_reader = VerticalBarReader()
     # 0aa70ffb057f
-    read_result = graph_reader.read_graph("dataset/train/images/0aa70ffb057f.jpg")
+    # -90 0e66aa993d9a
+    read_result = graph_reader.read_graph("dataset/train/images/0e66aa993d9a.jpg")
     print(read_result)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
