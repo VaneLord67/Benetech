@@ -271,6 +271,9 @@ def split_bar_yolo_method(img, yolo_model):
     res = yolo_model(img)
     bars = []
     boxes = sorted(res[0].boxes, key=lambda b: b.xyxy[0][0].item())
+    intersection_helper_y = None
+    if len(boxes) > 0:
+        intersection_helper_y = boxes[0].xyxy[0][3].item()
     for box in boxes:
         # box.xyxy的顺序是左上的x坐标 y坐标；右下的x坐标 y坐标
         bars.append(((box.xyxy[0][0].item(), box.xyxy[0][1].item()), (box.xyxy[0][2].item(), box.xyxy[0][1].item())))
@@ -278,7 +281,7 @@ def split_bar_yolo_method(img, yolo_model):
         res_plotted = res[0].plot()
         cv2.imshow("split_bar_yolo_method", res_plotted)
         print(f'bars = {bars}')
-    return bars
+    return bars, int(intersection_helper_y)
 
 
 def split_bar_line_method(img, intersection):
@@ -466,8 +469,7 @@ class VerticalBarReader(AbstractGraphReader):
             print(f'value_per_pixel = {value_per_pixel}')
         return value_per_pixel
 
-    def read_bar(self, img, value_per_pixel) -> (List[str], List[int]):
-        bars = split_bar_yolo_method(img, self.yolo_model)
+    def read_bar(self, img, value_per_pixel, bars) -> (List[str], List[int]):
         # bars = split_bar_line_method(img, self.intersection)
         y_axis_result: List[str] = []
         # 遍历轮廓
@@ -492,11 +494,14 @@ class VerticalBarReader(AbstractGraphReader):
         try:
             # 读取图片
             img = cv2.imread(filepath)
+            bars, intersection_helper_y = split_bar_yolo_method(img, self.yolo_model)
             intersection = get_intersection(img)
+            if intersection_helper_y:
+                intersection = (intersection[0], intersection_helper_y)
             self.intersection = intersection
             y_axis_img = get_y_axis_img(img, intersection)
             value_per_pixel = self.get_value_per_pixel(y_axis_img)
-            y_axis_result, bars = self.read_bar(img, value_per_pixel)
+            y_axis_result, bars = self.read_bar(img, value_per_pixel, bars)
             x_axis_img = get_x_axis_img(img, intersection)
             x_axis_result, x_axis_result_pos_x = self.read_x_axis(x_axis_img)
             x_axis_result, y_axis_result = data_align(x_axis_result_pos_x, bars, x_axis_result,
