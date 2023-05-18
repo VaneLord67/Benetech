@@ -14,10 +14,14 @@ from read_result import ReadResult
 DEBUG_MODE = True
 
 
-def data_align(x_axis_result_pos_x, bars, y_axis_result):
+def data_align(x_axis_result_pos_x, bars, x_axis_result, y_axis_result, intersection):
     align_y_axis_result = []
-    for pos_x in x_axis_result_pos_x:
+    align_x_axis_result = []
+    for idx, pos_x in enumerate(x_axis_result_pos_x):
+        if pos_x < intersection[0]:
+            continue
         flag = False
+        align_x_axis_result.append(x_axis_result[idx])
         for i in range(len(bars)):
             bar = bars[i]
             if bar[0][0] <= pos_x <= bar[1][0]:
@@ -26,8 +30,7 @@ def data_align(x_axis_result_pos_x, bars, y_axis_result):
                 break
         if not flag:
             align_y_axis_result.append('0')
-
-    return align_y_axis_result
+    return align_x_axis_result, align_y_axis_result
 
 
 def on_mouse(event, x, y, flag, param):
@@ -83,6 +86,7 @@ def invert_img(img):
 
 
 def get_intersection(img):
+    intersection = None
     intersection_img = np.copy(img)
     intersection_img_height, intersection_img_width, _ = intersection_img.shape
     # 转换为灰度图像
@@ -103,17 +107,18 @@ def get_intersection(img):
         if is_vertical_line(x1, x2) and abs(intersection_img_width - x1) > 5:
             cv2.line(intersection_img, (x1, y1), (x2, y2), (0, 0, 255), 2)
             vertical_lines.append((x1, y1, x2, y2))
-    if DEBUG_MODE:
-        cv2.imshow('intersection_img', intersection_img)
     if len(horizontal_lines) > 0:
         horizontal_axis = max(horizontal_lines, key=lambda l: (abs(x2 - x1), l[1]))
         intersection = (horizontal_axis[0], horizontal_axis[1])
-        return intersection
     elif len(vertical_lines) > 0:
         vertical_axis = max(vertical_lines, key=lambda l: (abs(y2 - y1), l[0]))
         intersection = (vertical_axis[0], vertical_axis[1])
-        return intersection
-    raise LookupError("未定位到坐标轴原点")
+    if DEBUG_MODE:
+        cv2.imshow('intersection_img', intersection_img)
+        print(f'intersection = {intersection}')
+    if not intersection:
+        raise LookupError("未定位到坐标轴原点")
+    return intersection
 
 
 def rotate_image(img, angle):
@@ -339,10 +344,10 @@ def split_bar_contour_method(img, intersection):
 
 
 class VerticalBarReader(AbstractGraphReader):
-    def __init__(self):
+    def __init__(self, model_path='./vertical_bar_reader/best.pt'):
         self.intersection = (0, 0)  # 坐标轴原点
         self.reader = easyocr.Reader(['en'])
-        self.yolo_model = YOLO('./vertical_bar_reader/best.pt')
+        self.yolo_model = YOLO(model_path)
 
     @staticmethod
     def hough_method(img) -> int:
@@ -494,7 +499,8 @@ class VerticalBarReader(AbstractGraphReader):
             y_axis_result, bars = self.read_bar(img, value_per_pixel)
             x_axis_img = get_x_axis_img(img, intersection)
             x_axis_result, x_axis_result_pos_x = self.read_x_axis(x_axis_img)
-            y_axis_result = data_align(x_axis_result_pos_x, bars, y_axis_result)
+            x_axis_result, y_axis_result = data_align(x_axis_result_pos_x, bars, x_axis_result,
+                                                      y_axis_result, intersection)
             read_result.x_series = x_axis_result
             read_result.y_series = y_axis_result
             return read_result
@@ -505,7 +511,7 @@ class VerticalBarReader(AbstractGraphReader):
 
 if __name__ == '__main__':
     DEBUG_MODE = True
-    graph_reader = VerticalBarReader()
+    graph_reader = VerticalBarReader(model_path='./vertical_bar_reader/best.pt')
     # 0aa70ffb057f
     # -90 0e66aa993d9a
     read_result = graph_reader.read_graph("dataset/train/images/0e66aa993d9a.jpg")

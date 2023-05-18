@@ -16,7 +16,6 @@ if __name__ == '__main__':
     # 分类图表
     graph_classifier = GraphClassifier()
     graph_filenames = graph_data_loader.get_graph_filenames()
-    annotations = graph_data_loader.get_annotations()
     graph_path = ""
     graph_type = graph_classifier.classify(graph_path)
     graph_reader: AbstractGraphReader
