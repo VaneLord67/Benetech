@@ -206,13 +206,13 @@ def morphology_method(x_axis_img) -> int:
         angle = atan2 / math.pi * 180
         if height > width and -5 < angle < 5:
             angle = -90
-        if -50 < angle < -40:
+        if -55 < angle < -35:
             negative_45_cnt += 1
-        elif 40 < angle < 50:
+        elif 35 < angle < 55:
             positive_45_cnt += 1
-        elif -95 < angle < -85:
+        elif -100 < angle < -80:
             negative_90_cnt += 1
-        elif -5 < angle < 5:
+        elif -10 < angle < 10:
             zero_cnt += 1
         if DEBUG_MODE:
             cv2.drawContours(x_axis_img, [box], 0, (0, 255, 0), 2)
@@ -223,7 +223,7 @@ def morphology_method(x_axis_img) -> int:
         return -45
     elif positive_45_cnt / zero_cnt >= 0.5:
         return +45
-    elif negative_90_cnt / zero_cnt >= 0.5:
+    elif negative_90_cnt / zero_cnt >= 1:
         return -90
     else:
         return 0
@@ -386,7 +386,7 @@ class VerticalBarReader(AbstractGraphReader):
     def read_x_axis(self, x_axis_img) -> (List[str], List[int]):
         angle = get_x_axis_angle(x_axis_img)
         if DEBUG_MODE:
-            print(f'angle = {angle}')
+            print(f'x_axis_angle = {angle}')
         rotated_img, rotation_matrix = rotate_image(x_axis_img, angle)  # 如果不执行旋转变换，那么ocr可能会识别到断续的结果
         resize_factor = 2
         resize_x_axis_img = cv2.resize(rotated_img, None,
@@ -395,6 +395,7 @@ class VerticalBarReader(AbstractGraphReader):
             cv2.imshow('x_axis_img', resize_x_axis_img)
         # 读取图片并进行识别
         ocr_result = self.reader.readtext(resize_x_axis_img)
+        ocr_result = [r for r in ocr_result if r[2] >= 0.1]  # 置信度约束
         if angle == -45:
             ocr_result = sorted(ocr_result, key=lambda c: c[0][0][1])
         elif angle == 45:
@@ -416,15 +417,21 @@ class VerticalBarReader(AbstractGraphReader):
             print(f'ocr_result = {ocr_result}')
         # 输出识别结果
         x_axis_result_pos_x = []
+        rotation_matrix_3x3 = np.vstack([rotation_matrix, [0, 0, 1]])  # 添加齐次坐标的最后一行
+        rotation_matrix_inv = np.linalg.inv(rotation_matrix_3x3)
+        if angle == 0 and len(ocr_result) == 1:
+            long_text = ocr_result[0][1]
+            texts = long_text.split(' ')
+            return [t for t in texts], None
         for r in ocr_result:
             # r[0]表示文本行的四个顶点坐标，按照左上、右上、右下、左下的顺序排列。
             # r[1]表示字符串
             # r[2]表示置信度
             if abs(r[0][0][1] - r[0][1][1]) < 5:  # 只取水平线方向的文本
                 if angle == 0 and r[0][0][1] > aver_ocr_result_y:
+                    if DEBUG_MODE:
+                        print(f'skip text: {r[1]}')
                     continue
-                rotation_matrix_3x3 = np.vstack([rotation_matrix, [0, 0, 1]])  # 添加齐次坐标的最后一行
-                rotation_matrix_inv = np.linalg.inv(rotation_matrix_3x3)
                 if angle == -45:
                     result_pos_x = r[0][1][0]
                     result_pos_y = r[0][1][1]
@@ -504,8 +511,8 @@ class VerticalBarReader(AbstractGraphReader):
             y_axis_result, bars = self.read_bar(img, value_per_pixel, bars)
             x_axis_img = get_x_axis_img(img, intersection)
             x_axis_result, x_axis_result_pos_x = self.read_x_axis(x_axis_img)
-            x_axis_result, y_axis_result = data_align(x_axis_result_pos_x, bars, x_axis_result,
-                                                      y_axis_result, intersection)
+            if x_axis_result_pos_x:
+                x_axis_result, y_axis_result = data_align(x_axis_result_pos_x, bars, y_axis_result)
             read_result.x_series = x_axis_result
             read_result.y_series = y_axis_result
             return read_result
@@ -519,7 +526,7 @@ if __name__ == '__main__':
     graph_reader = VerticalBarReader(model_path='./vertical_bar_reader/best.pt')
     # 0aa70ffb057f
     # -90 0e66aa993d9a
-    read_result = graph_reader.read_graph("dataset/train/images/0e66aa993d9a.jpg")
+    read_result = graph_reader.read_graph("dataset/train/images/ed35aa1492f9.jpg")
     print(read_result)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
