@@ -512,7 +512,8 @@ class VerticalBarReader(AbstractGraphReader):
             x_axis_img = get_x_axis_img(img, intersection)
             x_axis_result, x_axis_result_pos_x = self.read_x_axis(x_axis_img)
             if x_axis_result_pos_x:
-                x_axis_result, y_axis_result = data_align(x_axis_result_pos_x, bars, y_axis_result)
+                x_axis_result, y_axis_result = data_align(x_axis_result_pos_x, bars,
+                                                          x_axis_result, y_axis_result, intersection)
             read_result.x_series = x_axis_result
             read_result.y_series = y_axis_result
             return read_result
