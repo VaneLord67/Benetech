@@ -9,16 +9,14 @@ class GraphDataLoader:
 
     @staticmethod
     def list_files(directory):
-        files = []
-        for filename in os.listdir(directory):
+        for filename in sorted(os.listdir(directory)):
             path = os.path.join(directory, filename)
             if os.path.isfile(path):
-                files.append(filename)
-        return files
+                yield os.path.abspath(path)
 
     @staticmethod
-    def get_graph_filenames():
-        return GraphDataLoader.list_files("dataset/train/images")
+    def get_graph_filenames(input_graph_path):
+        return GraphDataLoader.list_files(input_graph_path)
 
     @staticmethod
     def get_annotations():

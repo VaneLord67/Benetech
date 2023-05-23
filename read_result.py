@@ -1,4 +1,16 @@
+import os
 from typing import List
+
+
+def is_value(value_string) -> bool:
+    s = value_string.split('.')
+    if len(s) > 2:
+        return False
+    else:
+        for si in s:
+            if not si.isdigit():
+                return False
+        return True
 
 
 class ReadResult:
@@ -11,9 +23,30 @@ class ReadResult:
 
     def toCSVResult(self):
         x_data_series = ";".join(self.x_series)
-        y_data_series = ";".join(self.y_series)
+        y_data_check = False
+        for y_data in self.y_series:
+            if not is_value(y_data):
+                y_data_check = True
+                break
+        if y_data_check:
+            y_data_series = ['1']
+        else:
+            y_data_series = ";".join(self.y_series)
         return [f'{self.id}_x', x_data_series, self.chart_type], \
-               [f'{self.id}_y', y_data_series, self.chart_type]
+            [f'{self.id}_y', y_data_series, self.chart_type]
 
     def __str__(self):
         return str(self.toCSVResult())
+
+    @staticmethod
+    def default_result(filepath):
+        file_name_with_extension = os.path.basename(filepath)
+        file_name_without_extension, _ = os.path.splitext(file_name_with_extension)
+        r = ReadResult()
+        r.id = file_name_without_extension
+        r.chart_type = "vertical_bar"
+        r.x_series.append('0.0')
+        r.x_series.append('1.0')
+        r.y_series.append('0.0')
+        r.y_series.append('1.0')
+        return r

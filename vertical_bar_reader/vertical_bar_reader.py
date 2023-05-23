@@ -1,3 +1,4 @@
+import re
 import math
 import os
 from typing import List
@@ -7,11 +8,36 @@ import easyocr
 import numpy as np
 from ultralytics import YOLO
 
+from env import *
 from abstract_graph_reader import AbstractGraphReader
 from graph_classifier.graph_classifier import GraphType
-from read_result import ReadResult
+from read_result import ReadResult, is_value
 
-DEBUG_MODE = True
+
+def data_submit_check(x_series, y_series):
+    x_series = [s.replace(",", "") for s in x_series]
+    x_series = [re.sub(r'[^0-9a-zA-Z_()\-\s]', '', s) for s in x_series]
+    submit_x_series = []
+    x_series_len = len(x_series)
+    submit_y_series = [str(round(float(num), 1)) for num in y_series]
+    x_numeric_cnt = 0
+    for x_data in x_series:
+        if is_value(x_data):
+            x_numeric_cnt += 1
+    if x_numeric_cnt > x_series_len / 2:
+        for x_data in x_series:
+            if is_value(x_data):
+                submit_x_series.append(x_data)
+            else:
+                filtered_string = ''.join(filter(str.isdigit, x_data))
+                submit_x_series.append(filtered_string if filtered_string != "" else "0.0")
+    else:
+        for x_data in x_series:
+            if is_value(x_data):
+                submit_x_series.append("unknown")
+            else:
+                submit_x_series.append(x_data)
+    return submit_x_series, submit_y_series
 
 
 def data_align(x_axis_result_pos_x, bars, x_axis_result, y_axis_result, intersection):
@@ -81,7 +107,8 @@ def invert_img(img):
         lut[i][0] = 255 - i
     inverted_img = cv2.LUT(gray_img, lut)
     inverted_img = cv2.cvtColor(inverted_img, cv2.COLOR_GRAY2BGR)
-    cv2.imshow('invert_img', inverted_img)
+    if DEBUG_MODE:
+        cv2.imshow('invert_img', inverted_img)
     return inverted_img
 
 
@@ -233,17 +260,6 @@ def get_x_axis_angle(img) -> int:
     return morphology_method(img)
 
 
-def is_value(value_string) -> bool:
-    s = value_string.split('.')
-    if len(s) > 2:
-        return False
-    else:
-        for si in s:
-            if not si.isdigit():
-                return False
-        return True
-
-
 def filter_bar(rect, box, img, intersection):
     img_height, img_width, _ = img.shape
     # 计算矩形宽度和高度
@@ -349,7 +365,7 @@ def split_bar_contour_method(img, intersection):
 class VerticalBarReader(AbstractGraphReader):
     def __init__(self, model_path='./vertical_bar_reader/best.pt'):
         self.intersection = (0, 0)  # 坐标轴原点
-        self.reader = easyocr.Reader(['en'])
+        self.reader = READER
         self.yolo_model = YOLO(model_path)
 
     @staticmethod
@@ -514,20 +530,18 @@ class VerticalBarReader(AbstractGraphReader):
             if x_axis_result_pos_x:
                 x_axis_result, y_axis_result = data_align(x_axis_result_pos_x, bars,
                                                           x_axis_result, y_axis_result, intersection)
-            read_result.x_series = x_axis_result
-            read_result.y_series = y_axis_result
+            read_result.x_series, read_result.y_series = data_submit_check(x_axis_result, y_axis_result)
             return read_result
         except LookupError as e:
             print(e)
-            return read_result
+            return ReadResult().default_result(filepath)
 
 
 if __name__ == '__main__':
-    DEBUG_MODE = True
-    graph_reader = VerticalBarReader(model_path='./vertical_bar_reader/best.pt')
+    graph_reader = VerticalBarReader(model_path=ROOT_PATH + 'vertical_bar_reader/best.pt')
     # 0aa70ffb057f
     # -90 0e66aa993d9a
-    read_result = graph_reader.read_graph("dataset/train/images/ed35aa1492f9.jpg")
+    read_result = graph_reader.read_graph(DATASET_PATH + "train/images/0000ae6cbdb1.jpg")
     print(read_result)
     cv2.waitKey(0)
     cv2.destroyAllWindows()

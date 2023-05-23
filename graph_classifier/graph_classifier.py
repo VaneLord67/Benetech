@@ -17,35 +17,38 @@ class GraphType(Enum):
 
 
 class GraphClassifier:
-    def __init__(self):
+    def __init__(self, model_path):
         self.model = LeNet()
-        self.model.load_state_dict(torch.load('graph_classifier/graph_classifier.pth'))
+        self.model.load_state_dict(torch.load(model_path))
         self.transform = transforms.Compose([
-                transforms.Resize((267, 466)),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
-            ])
+            transforms.Resize((267, 466)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+        ])
 
     def classify(self, graph_path: str) -> GraphType:
-        # 加载要预测的图片并进行数据预处理
-        image = Image.open(graph_path)
-        image = self.transform(image)
-        # 对图片进行预测
-        with torch.no_grad():
-            output = self.model(image.unsqueeze(0))  # 加一维，batch size为1
-            _, predicted = torch.max(output.data, 1)
-            print(predicted.item())  # 输出预测的分类标签
-            item = predicted.item()
-            if item == 0:
-                return GraphType.DOT
-            elif item == 1:
-                return GraphType.HORIZONTAL_BAR
-            elif item == 2:
-                return GraphType.LINE
-            elif item == 3:
-                return GraphType.SCATTER
-            else:
-                return GraphType.VERTICAL_BAR
+        try:
+            # 加载要预测的图片并进行数据预处理
+            image = Image.open(graph_path)
+            image = self.transform(image)
+            # 对图片进行预测
+            with torch.no_grad():
+                output = self.model(image.unsqueeze(0))  # 加一维，batch size为1
+                _, predicted = torch.max(output.data, 1)
+                item = predicted.item()
+                if item == 0:
+                    return GraphType.DOT
+                elif item == 1:
+                    return GraphType.HORIZONTAL_BAR
+                elif item == 2:
+                    return GraphType.LINE
+                elif item == 3:
+                    return GraphType.SCATTER
+                else:
+                    return GraphType.VERTICAL_BAR
+        except Exception:
+            return GraphType.VERTICAL_BAR
+
 
 # 定义LeNet网络
 class LeNet(nn.Module):
@@ -158,4 +161,4 @@ def predict():
 
 if __name__ == '__main__':
     # predict()
-    train() # Epoch: 5, Test Accuracy: 99.22%
+    train()  # Epoch: 5, Test Accuracy: 99.22%
