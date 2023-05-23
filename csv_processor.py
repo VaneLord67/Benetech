@@ -1,21 +1,25 @@
-import csv
-
+import os
+import pandas as pd
 from read_result import ReadResult
 
 
 class CSVProcessor:
-    def __init__(self, csv_file_name):
+    def __init__(self, csv_file_path):
+        self.csv_file_path = csv_file_path
         header = ['id', 'data_series', 'chart_type']  # 表头
-        file = open(f'output/{csv_file_name}', 'w', newline='')
-        writer = csv.writer(file)
-        self.file = file
-        self.csv_file_writer = writer
-        writer.writerow(header)
+        df = pd.DataFrame(columns=header)
+        df.to_csv(csv_file_path, header=True, index=False)
 
     def append(self, read_result: ReadResult):
-        result_x, result_y = read_result.toCSVResult()
-        self.csv_file_writer.writerow(result_x)
-        self.csv_file_writer.writerow(result_y)
+        df = pd.DataFrame({
+            'id': [read_result.id + "_x", read_result.id + "_y"],
+            'data_series': [";".join(read_result.x_series), ";".join(read_result.y_series)],
+            'chart_type': ['vertical_bar', 'vertical_bar'],
+        })
+        df.to_csv(self.csv_file_path, index=False, header=False, mode='a')
 
-    def close(self):
-        self.file.close()
+    def file_check(self):
+        if os.path.exists(self.csv_file_path):
+            print("csv file exist")
+        else:
+            print("csv file not found")
