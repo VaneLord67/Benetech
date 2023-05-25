@@ -134,10 +134,10 @@ def get_intersection(img):
             cv2.line(intersection_img, (x1, y1), (x2, y2), (0, 0, 255), 2)
             vertical_lines.append((x1, y1, x2, y2))
     if len(horizontal_lines) > 0:
-        horizontal_axis = max(horizontal_lines, key=lambda l: (abs(x2 - x1), l[1]))
+        horizontal_axis = max(horizontal_lines, key=lambda l: (abs(l[2] - l[0]), l[1]))
         intersection = (horizontal_axis[0], horizontal_axis[1])
     elif len(vertical_lines) > 0:
-        vertical_axis = max(vertical_lines, key=lambda l: (abs(y2 - y1), l[0]))
+        vertical_axis = max(vertical_lines, key=lambda l: (abs(l[3] - l[1]), l[0]))
         intersection = (vertical_axis[0], vertical_axis[1])
     if DEBUG_MODE:
         cv2.imshow('intersection_img', intersection_img)
