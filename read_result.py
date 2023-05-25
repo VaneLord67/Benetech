@@ -3,14 +3,11 @@ from typing import List
 
 
 def is_value(value_string) -> bool:
-    s = value_string.split('.')
-    if len(s) > 2:
-        return False
-    else:
-        for si in s:
-            if not si.isdigit():
-                return False
+    try:
+        float(value_string)
         return True
+    except:
+        return False
 
 
 class ReadResult:
@@ -39,11 +36,15 @@ class ReadResult:
         return str(self.toCSVResult())
 
     @staticmethod
-    def default_result(filepath):
+    def get_id(filepath):
         file_name_with_extension = os.path.basename(filepath)
         file_name_without_extension, _ = os.path.splitext(file_name_with_extension)
+        return file_name_without_extension
+
+    @staticmethod
+    def default_result(filepath):
         r = ReadResult()
-        r.id = file_name_without_extension
+        r.id = ReadResult().get_id(filepath)
         r.chart_type = "vertical_bar"
         r.x_series.append('0.0')
         r.x_series.append('1.0')
