@@ -11,6 +11,8 @@ if __name__ == '__main__':
     from vertical_bar_reader.vertical_bar_reader import VerticalBarReader
     from read_result import ReadResult
     from env import *
+    from deplot_reader.deplot_reader import DeplotReader, check_if_failed
+
     try:
         # 读取数据
         graph_data_loader = GraphDataLoader()
@@ -22,10 +24,15 @@ if __name__ == '__main__':
         for file_path in tqdm(file_generator):
             read_result: ReadResult
             try:
-                graph_type = graph_classifier.classify(file_path)
+                graph_type = graph_classifier.classify(file_path).value
                 graph_reader: AbstractGraphReader
-                if graph_type == GraphType.VERTICAL_BAR:
-                    graph_reader = VerticalBarReader(ROOT_PATH + 'vertical_bar_reader/best.pt')
+                graph_reader = DeplotReader(graph_type)
+                read_result = graph_reader.read_graph(file_path)
+                if check_if_failed(read_result) and graph_type == GraphType.VERTICAL_BAR.value:
+                    print("deplot failed, change to yolo detect")
+                    read_result = VerticalBarReader(ROOT_PATH + 'vertical_bar_reader/best.pt').read_graph(file_path)
+                # if graph_type == GraphType.VERTICAL_BAR:
+                #     graph_reader = VerticalBarReader(ROOT_PATH + 'vertical_bar_reader/best.pt')
                 # elif graph_type == GraphType.HORIZONTAL_BAR:
                 #     graph_reader = HorizontalBarReader()
                 # elif graph_type == GraphType.DOT:
@@ -34,10 +41,10 @@ if __name__ == '__main__':
                 #     graph_reader = LineReader()
                 # elif graph_type == GraphType.SCATTER:
                 #     graph_reader = ScatterReader()
-                else:
-                    graph_reader = ExampleReader()
+                # else:
+                #     graph_reader = ExampleReader()
                 # 产生结果
-                read_result = graph_reader.read_graph(file_path)
+                # read_result = graph_reader.read_graph(file_path)
                 # print(read_result)
             except Exception as e:
                 print(e)

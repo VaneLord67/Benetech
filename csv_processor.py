@@ -14,7 +14,7 @@ class CSVProcessor:
         df = pd.DataFrame({
             'id': [read_result.id + "_x", read_result.id + "_y"],
             'data_series': [";".join(read_result.x_series), ";".join(read_result.y_series)],
-            'chart_type': ['vertical_bar', 'vertical_bar'],
+            'chart_type': [read_result.chart_type, read_result.chart_type],
         })
         df.to_csv(self.csv_file_path, index=False, header=False, mode='a')
 

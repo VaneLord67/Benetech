@@ -1,15 +1,14 @@
-import re
 import math
 import os
+import re
 from typing import List
 
 import cv2
-import easyocr
 import numpy as np
 from ultralytics import YOLO
 
-from env import *
 from abstract_graph_reader import AbstractGraphReader
+from env import *
 from graph_classifier.graph_classifier import GraphType
 from read_result import ReadResult, is_value
 
