@@ -7,17 +7,11 @@ from abstract_graph_reader import AbstractGraphReader
 from read_result import ReadResult, is_value
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-model = Pix2StructForConditionalGeneration.from_pretrained(env.ROOT_PATH + "huggingface/models--google--deplot",
-                                                           is_vqa=False).to(device)
-processor = AutoProcessor.from_pretrained(env.ROOT_PATH + "huggingface/models--google--deplot", is_vqa=False)
+model = Pix2StructForConditionalGeneration. \
+    from_pretrained(env.ROOT_PATH + "huggingface/models--google--deplot").to(device)
+processor = AutoProcessor. \
+    from_pretrained(env.ROOT_PATH + "huggingface/models--google--deplot")
 
-
-# processor = AutoProcessor.from_pretrained(env.ROOT_PATH + "huggingface/deplot-finetune",
-#                                           is_vqa=False, padding=True, truncation=True)
-# processor.tokenizer.add_tokens(train.new_tokens)
-# model = Pix2StructForConditionalGeneration.from_pretrained(env.ROOT_PATH + "huggingface/deplot-finetune",
-#                                                            is_vqa=False).to(device)
-# model.resize_token_embeddings(len(processor.tokenizer))
 
 def count_duplicate_elements(lst):
     unique_elements = set(lst)
@@ -47,6 +41,7 @@ class DeplotReader(AbstractGraphReader):
         r.chart_type = self.chart_type
         image = Image.open(filepath)
         inputs = processor(images=image, text="Generate underlying data table of the figure below:",
+                           font_path=env.ROOT_PATH + "huggingface/arial.ttf",
                            return_tensors="pt").to(device)
         predictions = model.generate(**inputs, max_new_tokens=512).to(device)
         result = processor.decode(predictions[0], skip_special_tokens=True)
@@ -75,4 +70,4 @@ class DeplotReader(AbstractGraphReader):
 
 
 if __name__ == '__main__':
-    print(DeplotReader("vertical_bar").read_graph(env.DATASET_PATH + "train/images/00d54d817e51.jpg"))
+    print(DeplotReader("vertical_bar").read_graph(env.DATASET_PATH + "train/images/0000ae6cbdb1.jpg"))

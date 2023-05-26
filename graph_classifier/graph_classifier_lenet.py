@@ -16,7 +16,7 @@ class GraphType(Enum):
     VERTICAL_BAR = "vertical_bar"
 
 
-class GraphClassifier:
+class GraphClassifierLenet:
     def __init__(self, model_path):
         self.model = LeNet()
         self.model.load_state_dict(torch.load(model_path))
