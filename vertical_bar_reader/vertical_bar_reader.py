@@ -9,7 +9,7 @@ from ultralytics import YOLO
 
 from abstract_graph_reader import AbstractGraphReader
 from env import *
-from graph_classifier.graph_classifier import GraphType
+from graph_classifier.graph_classifier_lenet import GraphType
 from read_result import ReadResult, is_value
 
 

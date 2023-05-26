@@ -1,7 +1,14 @@
 dataset
 datasets
 output
-*.pth
+runs
+**/*.pth
+**/*.jpg
+**/*.png
+**/*.json
+**/*.bin
+**/*.csv
+**/*.model
 
 # idea
 .idea

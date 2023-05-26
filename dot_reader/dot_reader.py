@@ -9,7 +9,7 @@ import numpy as np
 
 from env import *
 from abstract_graph_reader import AbstractGraphReader
-from graph_classifier.graph_classifier import GraphType
+from graph_classifier.graph_classifier_lenet import GraphType
 from read_result import ReadResult, is_value
 
 
