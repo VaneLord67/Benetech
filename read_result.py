@@ -1,6 +1,8 @@
 import os
 from typing import List
 
+from graph_classifier.graph_classifier_lenet import GraphType
+
 
 def is_value(value_string) -> bool:
     try:
@@ -18,7 +20,35 @@ class ReadResult:
         self.y_series: List[str] = []
         self.chart_type: str = ""
 
-    def toCSVResult(self):
+    def to_dict(self, ground_truth):
+        x_key = self.id + '_x'
+        y_key = self.id + '_y'
+
+        x_ground_truth = ground_truth.loc[x_key, 'data_series']
+        y_ground_truth = ground_truth.loc[y_key, 'data_series']
+        x_numeric_flag = True if isinstance(x_ground_truth[0], float) else False
+        y_numeric_flag = True if isinstance(y_ground_truth[0], float) else False
+
+        try:
+            if x_numeric_flag:
+                all_x = [float(x) for x in self.x_series]
+            else:
+                all_x = [x for x in self.x_series]
+        except:
+            all_x = [0.0]
+        try:
+            if y_numeric_flag:
+                all_y = [float(y) for y in self.y_series]
+            else:
+                all_y = [y for y in self.y_series]
+        except:
+            all_y = [0.0]
+
+        x_value = (all_x, self.chart_type)
+        y_value = (all_y, self.chart_type)
+        return x_key, x_value, y_key, y_value
+
+    def to_csv_result(self):
         x_data_series = ";".join(self.x_series)
         y_data_check = False
         for y_data in self.y_series:
@@ -33,7 +63,7 @@ class ReadResult:
             [f'{self.id}_y', y_data_series, self.chart_type]
 
     def __str__(self):
-        return str(self.toCSVResult())
+        return str(self.to_csv_result())
 
     @staticmethod
     def get_id(filepath):
