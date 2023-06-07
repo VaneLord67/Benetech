@@ -531,8 +531,9 @@ class VerticalBarReader(AbstractGraphReader):
                                                           x_axis_result, y_axis_result, intersection)
             read_result.x_series, read_result.y_series = data_submit_check(x_axis_result, y_axis_result)
             return read_result
-        except LookupError as e:
+        except Exception as e:
             print(e)
+            print(f'error id = {read_result.id}')
             return ReadResult().default_result(filepath)
 
 
@@ -540,7 +541,20 @@ if __name__ == '__main__':
     graph_reader = VerticalBarReader(model_path=ROOT_PATH + 'vertical_bar_reader/best.pt')
     # 0aa70ffb057f
     # -90 0e66aa993d9a
-    read_result = graph_reader.read_graph(DATASET_PATH + "train/images/0000ae6cbdb1.jpg")
+    read_result = graph_reader.read_graph(DATASET_PATH + "train/images/002f2f9fe7a0.jpg")
     print(read_result)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
+
+    # image = cv2.imread(DATASET_PATH + "train/images/0000ae6cbdb1.jpg")
+    # # 点的坐标
+    # point_x = 83
+    # point_y = 53 + 137
+    # # 在图像上绘制圆
+    # circle_color = (0, 255, 0)  # 绿色
+    # circle_radius = 5
+    # cv2.circle(image, (point_x, point_y), circle_radius, circle_color, -1)
+    # # 显示结果图像
+    # cv2.imshow('Image with Circle', image)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
