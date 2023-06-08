@@ -10,8 +10,10 @@ from sklearn.metrics import r2_score
 
 import env
 from abstract_graph_reader import AbstractGraphReader
+from deplot_reader.deplot_reader import DeplotReader
 from dot_reader.dot_reader import DotReader
 from graph_classifier.graph_classifier_resnet import GraphClassifierResnet
+from line_reader.line_reader import LineReader
 from read_result import ReadResult
 from vertical_bar_reader.vertical_bar_reader import VerticalBarReader
 from graph_classifier.graph_classifier_lenet import GraphType, GraphClassifierLenet
@@ -238,26 +240,34 @@ class MetricEvaluator():
 
 if __name__ == '__main__':
     # reader = VerticalBarReader(env.ROOT_PATH + 'vertical_bar_reader/best.pt')
-    reader = DotReader()
-    # metric_evaluator = MetricEvaluator(0.1, GraphType.VERTICAL_BAR.value)
-    metric_evaluator = MetricEvaluator(0.05, GraphType.DOT.value)
+    # reader = DotReader()
+    reader = LineReader()
+    # reader = DeplotReader(GraphType.VERTICAL_BAR.value)
+    # metric_evaluator = MetricEvaluator(0.001, GraphType.VERTICAL_BAR.value)
+    # metric_evaluator = MetricEvaluator(0.05, GraphType.DOT.value)
+    # metric_evaluator = MetricEvaluator(0.5, GraphType.HORIZONTAL_BAR.value)
+    metric_evaluator = MetricEvaluator(0.1, GraphType.LINE.value)
     metric_evaluator.evaluate_reader(reader)
-    # graph_classifier = GraphClassifierResnet(env.ROOT_PATH + "graph_classifier/Benetech "
-    #                                                      "_ResNet50_fold0.pth")
-    # graph_classifier = GraphClassifierLenet(env.ROOT_PATH + "graph_classifier/graph_classifier.pth")
-    # metric_evaluator.evaluate_classifier(graph_classifier)
-    #
-    # ground_truth = pd.DataFrame.from_dict({
-    #     '0a0a0_x': (['123.6', '456.7', '789.9'], 'dot'),
-    #     '0a0a0_y': ([0.2, 0.9, 2.1], 'dot'),
-    #     '0a0a1_x': (['123.6', '456.7', '789.9'], 'dot'),
-    #     '0a0a1_y': ([0.2, 0.9, 2.1], 'dot'),
-    # }, orient='index', columns=['data_series', 'chart_type']).rename_axis('id')
-    #
-    # predictions = pd.DataFrame.from_dict({
-    #     '0a0a0_x': (['123.6', '456.7', '789.9'], 'dot'),
-    #     '0a0a0_y': ([0.0], 'dot'),
-    #     '0a0a1_x': (['123.6', '456.7', '789.9'], 'dot'),
-    #     '0a0a1_y': ([0.2, 0.9, 2.1], 'dot'),
-    # }, orient='index', columns=['data_series', 'chart_type']).rename_axis('id')
-    # benetech_score(ground_truth, predictions)
+
+    '''
+    graph_classifier = GraphClassifierResnet(env.ROOT_PATH + "graph_classifier/Benetech _ResNet50_fold0.pth")
+    graph_classifier = GraphClassifierLenet(env.ROOT_PATH + "graph_classifier/graph_classifier.pth")
+    metric_evaluator.evaluate_classifier(graph_classifier)
+    '''
+
+    '''
+    ground_truth = pd.DataFrame.from_dict({
+        '0a0a0_x': (['123.6', '456.7', '789.9'], 'dot'),
+        '0a0a0_y': ([0.2, 0.9, 2.1], 'dot'),
+        '0a0a1_x': (['123.6', '456.7', '789.9'], 'dot'),
+        '0a0a1_y': ([0.2, 0.9, 2.1], 'dot'),
+    }, orient='index', columns=['data_series', 'chart_type']).rename_axis('id')
+    
+    predictions = pd.DataFrame.from_dict({
+        '0a0a0_x': (['123.6', '456.7', '789.9'], 'dot'),
+        '0a0a0_y': ([0.0], 'dot'),
+        '0a0a1_x': (['123.6', '456.7', '789.9'], 'dot'),
+        '0a0a1_y': ([0.2, 0.9, 2.1], 'dot'),
+    }, orient='index', columns=['data_series', 'chart_type']).rename_axis('id')
+    benetech_score(ground_truth, predictions)
+    '''
