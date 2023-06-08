@@ -1,6 +1,8 @@
 import os
 from typing import List
 
+import numpy as np
+
 from graph_classifier.graph_classifier_lenet import GraphType
 
 
@@ -31,14 +33,15 @@ class ReadResult:
 
         try:
             if x_numeric_flag:
-                all_x = [float(x) for x in self.x_series]
+                all_x = [float(x) if not np.isnan(float(x)) else 0.0 for x in self.x_series]
             else:
                 all_x = [x for x in self.x_series]
         except:
             all_x = [0.0]
+
         try:
             if y_numeric_flag:
-                all_y = [float(y) for y in self.y_series]
+                all_y = [float(y) if not np.isnan(float(y)) else 0.0 for y in self.y_series]
             else:
                 all_y = [y for y in self.y_series]
         except:
