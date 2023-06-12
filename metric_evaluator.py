@@ -11,10 +11,12 @@ from sklearn.metrics import r2_score
 import env
 from abstract_graph_reader import AbstractGraphReader
 from deplot_reader.deplot_reader import DeplotReader
+from donut_reader.donut_reader import DonutReader
 from dot_reader.dot_reader import DotReader
 from graph_classifier.graph_classifier_resnet import GraphClassifierResnet
 from line_reader.line_reader import LineReader
 from read_result import ReadResult
+from scatter_reader.scatter_reader import ScatterReader
 from vertical_bar_reader.vertical_bar_reader import VerticalBarReader
 from graph_classifier.graph_classifier_lenet import GraphType, GraphClassifierLenet
 from tqdm import tqdm
@@ -191,11 +193,12 @@ def get_filenames_by_chart_types(filenames, chart_types):
 
 
 class MetricEvaluator():
-    def __init__(self, val_ratio, chart_types=(GraphType.DOT.value,
-                                               GraphType.LINE.value,
-                                               GraphType.VERTICAL_BAR.value,
-                                               GraphType.HORIZONTAL_BAR.value,
-                                               GraphType.SCATTER.value)):
+    # val_ratio和val_len参数二选一填写
+    def __init__(self, val_ratio=float(1), val_len=None, chart_types=(GraphType.DOT.value,
+                                                                      GraphType.LINE.value,
+                                                                      GraphType.VERTICAL_BAR.value,
+                                                                      GraphType.HORIZONTAL_BAR.value,
+                                                                      GraphType.SCATTER.value)):
         self.val_ratio = val_ratio
         self.ground_truth: pd.DataFrame
         self.predictions: pd.DataFrame
@@ -203,7 +206,7 @@ class MetricEvaluator():
         filenames = os.listdir(env.DATASET_PATH + "train/images")
         random.shuffle(filenames)
         filenames = get_filenames_by_chart_types(filenames, chart_types)
-        filenames = filenames[:round(len(filenames) * val_ratio)]
+        filenames = filenames[:round(len(filenames) * val_ratio) if val_len is None else val_len]
         for filename in filenames:
             id, _ = os.path.splitext(filename)
             self.ids.append(id)
@@ -240,13 +243,16 @@ class MetricEvaluator():
 
 if __name__ == '__main__':
     # reader = VerticalBarReader(env.ROOT_PATH + 'vertical_bar_reader/best.pt')
+    # reader = DonutReader(given_chart_type=GraphType.LINE.value)
     # reader = DotReader()
-    reader = LineReader()
+    # reader = LineReader()
+    reader = ScatterReader(model_path=env.ROOT_PATH + 'scatter_reader/best.pt')
     # reader = DeplotReader(GraphType.VERTICAL_BAR.value)
-    # metric_evaluator = MetricEvaluator(0.001, GraphType.VERTICAL_BAR.value)
-    # metric_evaluator = MetricEvaluator(0.05, GraphType.DOT.value)
+    # metric_evaluator = MetricEvaluator(0.005, GraphType.VERTICAL_BAR.value)
+    # metric_evaluator = MetricEvaluator(val_len=100, chart_types=GraphType.LINE.value)
     # metric_evaluator = MetricEvaluator(0.5, GraphType.HORIZONTAL_BAR.value)
-    metric_evaluator = MetricEvaluator(0.1, GraphType.LINE.value)
+    # metric_evaluator = MetricEvaluator(0.1, GraphType.LINE.value)
+    metric_evaluator = MetricEvaluator(val_len=100, chart_types=GraphType.SCATTER.value)
     metric_evaluator.evaluate_reader(reader)
 
     '''
